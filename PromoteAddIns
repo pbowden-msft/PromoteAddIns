@@ -2,9 +2,9 @@
 #set -x
 
 TOOL_NAME="Microsoft Outlook Web Add-in Promotion"
-TOOL_VERSION="1.0"
+TOOL_VERSION="2.0"
 
-## Copyright (c) 2020 Microsoft Corp. All rights reserved.
+## Copyright (c) 2022 Microsoft Corp. All rights reserved.
 ## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
 ## Microsoft disclaims all implied warranties including, without limitation, any implied warranties of merchantability or of fitness for a 
 ## particular purpose. The entire risk arising out of the use or performance of the scripts and documentation remains with you. In no event shall
@@ -19,7 +19,10 @@ TOOL_VERSION="1.0"
 # The script sets the default state for the toolbar, but still allows users to customize it.
 # This script should be run on each Mac, ideally through a management agent.
 
-sudo defaults write /Library/Preferences/com.microsoft.Outlook ToolbarCustomization_CalendarEventEditorToolView_Preference -array freeBusy togglePrivateEvent attendeeOptions showScheduleAssistant attach a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup 7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup
+# Zoom
+sudo /usr/libexec/PlistBuddy -c "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup" ~/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist
 
+# WebEx
+sudo /usr/libexec/PlistBuddy -c "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string 7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup" ~/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist
 
 exit 0
