@@ -1,8 +1,8 @@
-#!/bin/sh
-#set -x
+#!/bin/zsh
+set -x
 
 TOOL_NAME="Microsoft Outlook Web Add-in Promotion"
-TOOL_VERSION="2.0"
+TOOL_VERSION="3.0"
 
 ## Copyright (c) 2022 Microsoft Corp. All rights reserved.
 ## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
@@ -19,10 +19,111 @@ TOOL_VERSION="2.0"
 # The script sets the default state for the toolbar, but still allows users to customize it.
 # This script should be run on each Mac, ideally through a management agent.
 
+GetLoggedInUser() {
+	LOGGEDIN=$(/bin/echo "show State:/Users/ConsoleUser" | /usr/sbin/scutil | /usr/bin/awk '/Name :/&&!/loginwindow/{print $3}')
+	if [ "$LOGGEDIN" = "" ]; then
+		echo "$USER"
+	else
+		echo "$LOGGEDIN"
+	fi
+}
+
+SetHomeFolder() {
+	HOME=$(dscl . read /Users/"$1" NFSHomeDirectory | cut -d ':' -f2 | cut -d ' ' -f2)
+	if [ "$HOME" = "" ]; then
+		if [ -d "/Users/$1" ]; then
+			HOME="/Users/$1"
+		else
+			HOME=$(eval echo "~$1")
+		fi
+	fi
+}
+
+PlistCommand() {
+	CMD="$1"
+	CONTAINER="$2"
+	sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "$CMD" "$CONTAINER"
+	echo "$?"
+}
+
+DefWrite() {
+	CMD="$1"
+	CONTAINER="$2"
+	sudo -u $LoggedInUser defaults write "$CONTAINER" "$CMD"
+}
+
+## Main
+LoggedInUser=$(GetLoggedInUser)
+SetHomeFolder "$LoggedInUser"
+
+## Constants
+OUTLOOK_CONTAINER_PREFS="$HOME/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist"
+OUTLOOK_USER_PREFS="$HOME/Library/Preferences/com.microsoft.Outlook.plist"
+
+# Check to make sure Outlooks preferences have been created in the container (i.e. Outlook has been run at least once)
+if [ -f "$OUTLOOK_CONTAINER_PREFS" ]; then
+	echo "Outlook preferences file found in container"
+	OUTLOOK_PREFS="$OUTLOOK_CONTAINER_PREFS"
+else
+	echo "Creating Outlook preferences file in user object"
+	OUTLOOK_PREFS="$OUTLOOK_USER_PREFS"
+fi
+	
+# Check to see if the toolbar preferences already exist
+MailToolBarExists=$(PlistCommand "print ToolbarCustomization_MailToolView_Preference" "$OUTLOOK_PREFS")
+if [ $MailToolBarExists = 1 ]; then
+	echo "Mail Toolbar preferences do not exist. Creating"
+	#DefWrite "ToolbarCustomization_MailToolView_Preference -array delete archive moveTo followUp toggleUnread sendReceive" "$OUTLOOK_PREFS"
+	PlistCommand "add ToolbarCustomization_MailToolView_Preference array" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string delete" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string archive" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string moveTo" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string followUp" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string toggleUnread" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string sendReceive" "$OUTLOOK_PREFS"
+	# REMOVE BEFORE SHIPPING
+	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string replyAll" "$OUTLOOK_PREFS"
+fi
+
+ReplyToolBarExists=$(PlistCommand "print ToolbarCustomization_NestedReplyToolView_Preference" "$OUTLOOK_PREFS")
+if [ $ReplyToolBarExists = 1 ]; then
+	echo "Reply Toolbar preferences do not exist. Creating"
+	PlistCommand "add ToolbarCustomization_NestedReplyToolView_Preference array" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string attach" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string signature" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string sensitivity" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string editorPane" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string accessibilityChecker" "$OUTLOOK_PREFS"
+fi
+
+CalendarToolBarExists=$(PlistCommand "print ToolbarCustomization_CalendarEventEditorToolView_Preference" "$OUTLOOK_PREFS")
+if [ $CalendarToolBarExists = 1 ]; then
+	echo "Calendar Toolbar preferences do not exist. Creating"
+	PlistCommand "add ToolbarCustomization_CalendarEventEditorToolView_Preference array" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string freeBusy" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string togglePrivateEvent" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string attendeeOptions" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string showScheduleAssistant" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string attach" "$OUTLOOK_PREFS"
+fi
+
+EventPreviewToolBarExists=$(PlistCommand "print ToolbarCustomization_CalendarEventPreviewToolView_Preference" "$OUTLOOK_PREFS")
+if [ $EventPreviewToolBarExists = 1 ]; then
+	echo "Event Preview Toolbar preferences do not exist. Creating"
+	PlistCommand "add ToolbarCustomization_CalendarEventPreviewToolView_Preference array" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string freeBusy" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string togglePrivateEvent" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string replyToMeeting" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string forwardMeeting" "$OUTLOOK_PREFS"
+	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string options" "$OUTLOOK_PREFS"
+fi
+		
+# Populate custom toolbar entries
+echo "Populating custom toolbar entries"
+
 # Zoom
-sudo /usr/libexec/PlistBuddy -c "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup" ~/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist
-
-# WebEx
-sudo /usr/libexec/PlistBuddy -c "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string 7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup" ~/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist
-
+PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup" "$OUTLOOK_PREFS"
+# WebEx 
+PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string 7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup" "$OUTLOOK_PREFS"
+	
 exit 0
