@@ -2,7 +2,7 @@
 #set -x
 
 TOOL_NAME="Microsoft Outlook Web Add-in Promotion"
-TOOL_VERSION="3.0"
+TOOL_VERSION="3.1"
 
 ## Copyright (c) 2022 Microsoft Corp. All rights reserved.
 ## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
@@ -39,17 +39,32 @@ SetHomeFolder() {
 	fi
 }
 
-PlistCommand() {
-	CMD="$1"
-	CONTAINER="$2"
-	sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "$CMD" "$CONTAINER"
+CheckToolbarExistence() {
+	VIEW="$1"
+	FILE="$2"
+	sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "print $VIEW" "$FILE" | grep -q "Array"
 	echo "$?"
 }
 
-DefWrite() {
-	CMD="$1"
-	CONTAINER="$2"
-	sudo -u $LoggedInUser defaults write "$CONTAINER" "$CMD"
+AddToolbar() {
+	VIEW="$1"
+	VALUE="$2"
+	FILE="$3"
+	# Check to see if the toolbar preference exists
+	sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "print $VIEW" "$FILE" | grep -q "Array"
+	if [ $? = 1 ]; then
+		# The toolbar preference doesn't exist, so let's create it
+		sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "add $VIEW array" "$FILE"
+	fi
+	# Check to see if the specified value already exists in the toolbar
+	sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "print $VIEW" "$FILE" | grep -q "$VALUE"
+	if [ $? = 1 ]; then
+		# The value doesn't already exist, so let's add it
+		echo "INFO: Adding $VALUE to toolbar $VIEW in $FILE"
+		sudo -u $LoggedInUser /usr/libexec/PlistBuddy -c "add :$VIEW: string $VALUE" "$FILE"
+	else
+		echo "INFO: $VALUE already exists in toolbar $VIEW"
+	fi
 }
 
 ## Main
@@ -65,65 +80,56 @@ if [ -f "$OUTLOOK_CONTAINER_PREFS" ]; then
 	echo "Outlook preferences file found in container"
 	OUTLOOK_PREFS="$OUTLOOK_CONTAINER_PREFS"
 else
-	echo "Creating Outlook preferences file in user object"
+	echo "Using Outlook preferences file in user object"
 	OUTLOOK_PREFS="$OUTLOOK_USER_PREFS"
 fi
 	
-# Check to see if the toolbar preferences already exist
-MailToolBarExists=$(PlistCommand "print ToolbarCustomization_MailToolView_Preference" "$OUTLOOK_PREFS")
-if [ $MailToolBarExists = 1 ]; then
+# Toolbar MailToolView is the main toolbar that you see across the top of the UI when looking at the Mail module
+MailToolViewExists=$(CheckToolbarExistence "ToolbarCustomization_MailToolView_Preference" "$OUTLOOK_PREFS")
+if [ $MailToolViewExists = 1 ]; then
 	echo "Mail Toolbar preferences do not exist. Creating"
-	#DefWrite "ToolbarCustomization_MailToolView_Preference -array delete archive moveTo followUp toggleUnread sendReceive" "$OUTLOOK_PREFS"
-	PlistCommand "add ToolbarCustomization_MailToolView_Preference array" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string delete" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string archive" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string moveTo" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string followUp" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string toggleUnread" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string sendReceive" "$OUTLOOK_PREFS"
-	# REMOVE BEFORE SHIPPING
-	PlistCommand "add :ToolbarCustomization_MailToolView_Preference: string replyAll" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "delete" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "archive" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "moveTo" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "followUp" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "toggleUnread" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_MailToolView_Preference" "sendReceive" "$OUTLOOK_PREFS"
 fi
 
-ReplyToolBarExists=$(PlistCommand "print ToolbarCustomization_NestedReplyToolView_Preference" "$OUTLOOK_PREFS")
-if [ $ReplyToolBarExists = 1 ]; then
+# Toolbar NestedReplyToolView is the toolbar that you see in the compose window. Send and Discard buttons are hardcoded
+ReplyToolViewExists=$(CheckToolbarExistence "ToolbarCustomization_NestedReplyToolView_Preference" "$OUTLOOK_PREFS")
+if [ $ReplyToolViewExists = 1 ]; then
 	echo "Reply Toolbar preferences do not exist. Creating"
-	PlistCommand "add ToolbarCustomization_NestedReplyToolView_Preference array" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string attach" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string signature" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string sensitivity" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string editorPane" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_NestedReplyToolView_Preference: string accessibilityChecker" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_NestedReplyToolView_Preference" "attach" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_NestedReplyToolView_Preference" "signature" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_NestedReplyToolView_Preference" "sensitivity" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_NestedReplyToolView_Preference" "editorPane" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_NestedReplyToolView_Preference" "accessibilityChecker" "$OUTLOOK_PREFS"
 fi
 
-CalendarToolBarExists=$(PlistCommand "print ToolbarCustomization_CalendarEventEditorToolView_Preference" "$OUTLOOK_PREFS")
-if [ $CalendarToolBarExists = 1 ]; then
+# Toolbar CalendarEventEditorToolView is the compose form for new events
+CalendarToolViewExists=$(CheckToolbarExistence "ToolbarCustomization_CalendarEventEditorToolView_Preference" "$OUTLOOK_PREFS")
+if [ $CalendarToolViewExists = 1 ]; then
 	echo "Calendar Toolbar preferences do not exist. Creating"
-	PlistCommand "add ToolbarCustomization_CalendarEventEditorToolView_Preference array" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string freeBusy" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string togglePrivateEvent" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string attendeeOptions" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string showScheduleAssistant" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string attach" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "freeBusy" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "togglePrivateEvent" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "attendeeOptions" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "showScheduleAssistant" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "attach" "$OUTLOOK_PREFS"
 fi
+# Custom entries
+AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup" "$OUTLOOK_PREFS" # Zoom
+AddToolbar "ToolbarCustomization_CalendarEventEditorToolView_Preference" "7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup" "$OUTLOOK_PREFS" # WebEx
 
-EventPreviewToolBarExists=$(PlistCommand "print ToolbarCustomization_CalendarEventPreviewToolView_Preference" "$OUTLOOK_PREFS")
-if [ $EventPreviewToolBarExists = 1 ]; then
+# Toolbar CalendarEventPreviewToolView is the read form for existing events
+EventPreviewToolViewExists=$(CheckToolbarExistence "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "$OUTLOOK_PREFS")
+if [ $EventPreviewToolViewExists = 1 ]; then
 	echo "Event Preview Toolbar preferences do not exist. Creating"
-	PlistCommand "add ToolbarCustomization_CalendarEventPreviewToolView_Preference array" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string freeBusy" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string togglePrivateEvent" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string replyToMeeting" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string forwardMeeting" "$OUTLOOK_PREFS"
-	PlistCommand "add :ToolbarCustomization_CalendarEventPreviewToolView_Preference: string options" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "freeBusy" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "togglePrivateEvent" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "replyToMeeting" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "forwardMeeting" "$OUTLOOK_PREFS"
+	AddToolbar "ToolbarCustomization_CalendarEventPreviewToolView_Preference" "options" "$OUTLOOK_PREFS"
 fi
-		
-# Populate custom toolbar entries
-echo "Populating custom toolbar entries"
 
-# Zoom
-PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string a7ca6c74-33fb-43a4-a3e4-781078f0eff5-msgReadGroup" "$OUTLOOK_PREFS"
-# WebEx 
-PlistCommand "add :ToolbarCustomization_CalendarEventEditorToolView_Preference: string 7a91e319-a65d-4ceb-909b-12203561dbf5-apptOrganizerCommandGroup" "$OUTLOOK_PREFS"
-	
 exit 0
