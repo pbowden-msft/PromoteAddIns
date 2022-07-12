@@ -1,5 +1,5 @@
 #!/bin/zsh
-set -x
+#set -x
 
 TOOL_NAME="Microsoft Outlook Web Add-in Promotion"
 TOOL_VERSION="3.0"
